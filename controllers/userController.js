@@ -3,50 +3,31 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 // ===============================
-// REGISTER (Only new users)
-// ===============================
-export const registerUser = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: "Email already exists" });
-
-    // Hash password for new users
-    const hashed = await bcrypt.hash(password, 10);
-
-    user = await User.create({ name, email, password: hashed });
-
-    res.json({ message: "User Registered Successfully", user });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ===============================
-// LOGIN (Works for seeded + new users)
+// LOGIN (Works for existing seeded users + new hashed users)
 // ===============================
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user)
+    if (!user) {
       return res.status(400).json({ message: "Invalid Email" });
+    }
 
     let isMatch = false;
 
-    // CASE 1 — Password is hashed (new users)
+    // Hashed password (new users)
     if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
       isMatch = await bcrypt.compare(password, user.password);
-    } 
-    // CASE 2 — Password is plain text (seeded users)
+    }
+    // Plain password (old data from seed)
     else {
       isMatch = password === user.password;
     }
 
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(400).json({ message: "Wrong Password" });
+    }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -57,6 +38,49 @@ export const loginUser = async (req, res) => {
       token,
       user,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ===============================
+// UPDATE PROFILE IMAGE
+// ===============================
+export const updateProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No image uploaded" });
+    }
+
+    const imagePath = req.file.path.replace(/\\/g, "/").replace(/^.*uploads/, "uploads"); // Fix Windows slashes
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { profile_url: imagePath },
+      { new: true }
+    ).select("-password");
+
+    res.json({
+      message: "Profile picture updated",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+// ===============================
+// GET USER BY ID
+// ===============================
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

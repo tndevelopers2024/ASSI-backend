@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "superadmin"],
       default: "user",
     },
+    savedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
   },
   { timestamps: true }
 );

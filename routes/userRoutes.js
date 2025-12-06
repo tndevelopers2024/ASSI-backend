@@ -1,15 +1,30 @@
 import express from "express";
-import { registerUser, loginUser } from "../controllers/userController.js";
+import { loginUser, updateProfileImage, getUserById } from "../controllers/userController.js";
 import { protect } from "../middlewares/authMiddleware.js";
+import uploadProfile from "../middlewares/profileUpload.js";
 
 const router = express.Router();
 
-router.post("/register", registerUser);
+// LOGIN ONLY
 router.post("/login", loginUser);
 
-// Example protected route
+// GET MY PROFILE (protected)
 router.get("/profile", protect, (req, res) => {
   res.json({ user: req.user });
 });
+
+// UPDATE PROFILE IMAGE
+router.put(
+  "/update-profile-image",
+  protect,
+  uploadProfile.single("profile"),
+  updateProfileImage
+);
+
+
+
+
+// GET USER BY ID
+router.get("/:id", protect, getUserById);
 
 export default router;
