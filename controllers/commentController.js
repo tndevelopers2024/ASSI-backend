@@ -1,6 +1,7 @@
 import Comment from "../model/comment.js";
 import Post from "../model/post.js";
 import Notification from "../model/notification.js";
+import { io } from "../server.js";  // ⭐ REQUIRED for socket emit
 
 export const createComment = async (req, res) => {
   try {
@@ -14,7 +15,7 @@ export const createComment = async (req, res) => {
 
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    // If this is a reply to a comment, validate the parent comment
+    // If replying to another comment
     let parentComment = null;
     if (parentCommentId) {
       parentComment = await Comment.findById(parentCommentId).populate("user", "fullname");
@@ -23,54 +24,80 @@ export const createComment = async (req, res) => {
         return res.status(404).json({ message: "Parent comment not found" });
       }
 
-      // Ensure parent comment belongs to the same post
       if (parentComment.post.toString() !== postId) {
         return res.status(400).json({ message: "Parent comment does not belong to this post" });
       }
     }
 
+    // Create the new comment
     const comment = await Comment.create({
       post: postId,
       user: req.user._id,
       content,
-      files: req.files?.map((file) => file.path.replace(/\\/g, "/").replace(/^.*uploads[\\/]/, "uploads/")) || [],
+      files:
+        req.files?.map((file) =>
+          file.path.replace(/\\/g, "/").replace(/^.*uploads[\\/]/, "uploads/")
+        ) || [],
       parentComment: parentCommentId || null,
-      mentionedUser: parentComment ? parentComment.user._id : null
+      mentionedUser: parentComment ? parentComment.user._id : null,
     });
 
-    // Create notifications
+    // ---------------------------------------
+    // 🔥 NOTIFICATION GENERATION LOGIC
+    // ---------------------------------------
+
+    let notifyUserId = null;
+    let message = "";
+
     if (parentComment) {
-      // If replying to a comment, notify the parent comment author (not self)
+      // Reply notification
       if (parentComment.user._id.toString() !== req.user._id.toString()) {
-        await Notification.create({
-          user: parentComment.user._id,
-          fromUser: req.user._id,
-          type: "comment",
-          post: post._id,
-          comment: comment._id,  // ⭐ ADD THIS
-          message: `${req.user.fullname} replied to your comment`,
-        });
+        notifyUserId = parentComment.user._id;
+        message = `${req.user.fullname} replied to your comment`;
       }
     } else {
-      // If commenting on a post, notify the post owner (not self)
+      // Comment on post notification
       if (post.user._id.toString() !== req.user._id.toString()) {
-        await Notification.create({
-          user: post.user._id,
-          fromUser: req.user._id,
-          type: "comment",
-          post: post._id,
-          comment: comment._id,  // ⭐ ADD THIS
-          message: `${req.user.fullname} commented on your post`,
-        });
+        notifyUserId = post.user._id;
+        message = `${req.user.fullname} commented on your post`;
       }
     }
 
+    if (notifyUserId) {
+      await Notification.create({
+        user: notifyUserId,
+        fromUser: req.user._id,
+        type: "comment",
+        post: post._id,
+        comment: comment._id,
+        message,
+      });
+
+      // Count unread notifications for that user
+      const unreadCount = await Notification.countDocuments({
+        user: notifyUserId,
+        read: false,
+      });
+
+      // ---------------------------------------
+      // 🔥 REAL-TIME SOCKET IO EMIT
+      // ---------------------------------------
+      io.to(notifyUserId.toString()).emit("notification:new", {
+        count: unreadCount,
+        message,
+      });
+
+      console.log(`📢 Sent notification to user ${notifyUserId}:`, message);
+    }
+
+    // ---------------------------------------
+
     res.json({ message: "Comment added", comment });
   } catch (error) {
+    console.error("Comment creation error:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export const getComments = async (req, res) => {
   try {
@@ -81,29 +108,33 @@ export const getComments = async (req, res) => {
       .populate("mentionedUser", "fullname email")
       .populate({
         path: "parentComment",
-        populate: { path: "user", select: "fullname email" }
+        populate: { path: "user", select: "fullname email" },
       })
       .sort({ createdAt: -1 });
 
     res.json(comments);
   } catch (error) {
+    console.error("Get comments error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
 export const getCommentsByUser = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user._id;  // ⭐ logged-in user
+
     const comments = await Comment.find({ user: userId })
-      .populate("post", "content images") // Populate post details so we know what they commented on
+      .populate("post", "title content  createdAt")
       .populate("user", "fullname email profile_url")
       .sort({ createdAt: -1 });
 
     res.json(comments);
   } catch (error) {
+    console.error("Get user comments error:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const deleteCommentById = async (req, res) => {
   try {
@@ -114,21 +145,23 @@ export const deleteCommentById = async (req, res) => {
       return res.status(404).json({ message: "Comment not found" });
     }
 
-    // Allow only owner or admin
-    if (comment.user.toString() !== req.user._id.toString()) {
+    // Allow comment owner OR admin OR superadmin to delete the comment
+    if (
+      comment.user.toString() !== req.user._id.toString() &&
+      req.user.role !== "admin" &&
+      req.user.role !== "superadmin"
+    ) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // Delete the comment and its replies
+
     await Comment.deleteMany({
-      $or: [
-        { _id: id },
-        { parentComment: id }
-      ]
+      $or: [{ _id: id }, { parentComment: id }],
     });
 
     res.json({ message: "Comment deleted" });
   } catch (error) {
+    console.error("Delete comment error:", error);
     res.status(500).json({ message: error.message });
   }
 };

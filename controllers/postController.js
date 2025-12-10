@@ -1,5 +1,8 @@
 import Post from "../model/post.js";
 import User from "../model/user.js";
+import { io } from "../server.js";   // ⭐ REQUIRED for socket
+import Comment from "../model/comment.js";
+
 
 export const createPost = async (req, res) => {
   try {
@@ -22,7 +25,25 @@ export const createPost = async (req, res) => {
       images: imageUrls,
     });
 
+    // -------------------------------------------
+    // ⭐🔥 SEND REAL-TIME EVENT TO ALL USERS
+    // -------------------------------------------
+    io.emit("post:new", {
+      ...post._doc,
+      user: {
+        _id: req.user._id,
+        fullname: req.user.fullname,
+        profile_url: req.user.profile_url,
+        email: req.user.email,
+        user_id: req.user.user_id,
+      }
+    });
+
+    console.log("🔥 New post broadcasted:", post._id);
+    // -------------------------------------------
+
     res.json({ message: "Post created", post });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -31,10 +52,11 @@ export const createPost = async (req, res) => {
 
 
 
+
 export const getAllPosts = async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate("user", "fullname email profile_url user_id")   // ← FIXED
+      .populate("user", "fullname email profile_url user_id createdAt")   // ← FIXED
       .sort({ createdAt: -1 });
 
     res.json(posts);
@@ -48,28 +70,29 @@ export const getAllPosts = async (req, res) => {
 
 export const deletePost = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const { id } = req.params;
 
+    const post = await Post.findById(id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    // If superadmin → delete any post
-    if (req.user.role === "superadmin") {
-      await post.deleteOne();
-      return res.json({ message: "Post deleted by superadmin" });
-    }
-
-    // Normal user → delete only own post
+    // Check ownership
     if (post.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not allowed" });
+      return res.status(403).json({ message: "Unauthorized" });
     }
 
-    await post.deleteOne();
-    res.json({ message: "Post deleted" });
+    // 🔥 DELETE ALL COMMENTS OF THIS POST
+    await Comment.deleteMany({ post: id });
 
+    // Delete the post
+    await Post.findByIdAndDelete(id);
+
+    res.json({ message: "Post and its comments deleted" });
   } catch (error) {
+    console.error("Delete post error:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const getPostsByUser = async (req, res) => {
   try {
@@ -98,27 +121,41 @@ export const updatePost = async (req, res) => {
       return res.status(403).json({ message: "Not authorized to update this post" });
     }
 
-    // Update fields
+    // Update text fields
     post.title = req.body.title || post.title;
     post.content = req.body.content || post.content;
     post.category = req.body.category || post.category;
 
-    // Handle image updates
-    if (req.files && req.files.length > 0) {
-      const imageUrls = req.files.map((file) =>
-        file.path
-          .replace(/\\/g, "/")
-          .replace(/^.*uploads[\\/]/, "uploads/")
-      );
-      post.images = imageUrls;
+    // ⬅️ Extract existingImages from frontend
+    let existingImages = [];
+    if (req.body.existingImages) {
+      try {
+        existingImages = JSON.parse(req.body.existingImages);
+      } catch (error) {
+        console.log("JSON parse error:", error);
+      }
     }
+
+    // ⬅️ Extract newly uploaded image URLs
+    let newImageUrls = [];
+    if (req.files && req.files.length > 0) {
+      newImageUrls = req.files.map((file) =>
+        file.path.replace(/\\/g, "/").replace(/^.*uploads[\\/]/, "uploads/")
+      );
+    }
+
+    // ⬅️ MERGE: existingImages (kept) + newImageUrls (uploaded)
+    post.images = [...existingImages, ...newImageUrls];
 
     const updatedPost = await post.save();
     res.json({ message: "Post updated", post: updatedPost });
+
   } catch (error) {
+    console.log(error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const toggleSavePost = async (req, res) => {
   try {

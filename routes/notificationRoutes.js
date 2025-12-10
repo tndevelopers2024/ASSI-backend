@@ -1,3 +1,4 @@
+// routes/notificationRoutes.js
 import express from "express";
 import { protect } from "../middlewares/authMiddleware.js";
 import {
@@ -6,16 +7,30 @@ import {
   getUnreadCount,
   markAllRead
 } from "../controllers/notificationController.js";
+import Notification from "../model/notification.js";
 
 const router = express.Router();
 
+// 🔹 Get all notifications
 router.get("/", protect, getNotifications);
+
+// 🔹 Mark ONE notification as read (NEW FIXED ROUTE)
+router.put("/mark-one-read/:id", protect, async (req, res) => {
+  try {
+    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to mark notification as read" });
+  }
+});
+
+// 🔹 Existing route to mark read (still works)
 router.put("/:id/read", protect, markAsRead);
 
-// NEW — get unread count
+// 🔹 Get unread count
 router.get("/unread-count", protect, getUnreadCount);
 
-// NEW — mark all as read
+// 🔹 Mark ALL notifications as read
 router.put("/mark-read", protect, markAllRead);
 
 export default router;

@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -9,6 +10,9 @@ import userRoutes from "./routes/userRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+
+import { createServer } from "http";
+import { Server } from "socket.io";
 
 dotenv.config();
 connectDB();
@@ -34,6 +38,35 @@ app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/comments", commentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 
-// Server start
+// HTTP + Socket Server
+const httpServer = createServer(app);
+
+export const io = new Server(httpServer, {
+  cors: {
+    origin: [
+      process.env.CLIENT_URL || "http://localhost:3000",
+      "http://localhost:5173"
+    ],
+    methods: ["GET", "POST", "PUT"],
+  },
+});
+
+// SOCKET.IO LISTENERS
+io.on("connection", (socket) => {
+  console.log("🔥 User connected:", socket.id);
+
+  // If the client passed userId as query param, join a room for that user
+  const userId = socket.handshake.query?.userId;
+  if (userId) {
+    socket.join(userId.toString());
+    console.log(`Socket ${socket.id} joined room ${userId}`);
+  }
+
+  socket.on("disconnect", () => {
+    console.log("❌ User disconnected:", socket.id);
+  });
+});
+
+// Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+httpServer.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
