@@ -10,7 +10,8 @@ import {
   updatePost,
   toggleSavePost,
   getSavedPosts,
-  getPostById
+  getPostById,
+  toggleLikePost
 } from "../controllers/postController.js";
 
 const router = express.Router();
@@ -26,6 +27,9 @@ router.get("/user/:userId", protect, getPostsByUser);
 
 // ➤ Save/Unsave post
 router.put("/save/:id", protect, toggleSavePost);
+
+// ➤ Like/Unlike post
+router.put("/like/:id", protect, toggleLikePost);
 
 // ➤ Get saved posts
 router.get("/saved/all", protect, getSavedPosts);

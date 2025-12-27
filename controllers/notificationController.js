@@ -46,9 +46,9 @@ export const markAsRead = async (req, res) => {
       console.error("Socket emit error (markAsRead):", emitErr);
     }
 
-    res.json({ message: "Marked as read", count });
+    res.json({ success: true, message: "Marked as read", count });
   } catch (e) {
-    res.status(500).json({ message: e.message });
+    res.status(500).json({ success: false, message: e.message });
   }
 };
 

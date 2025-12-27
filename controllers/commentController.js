@@ -2,6 +2,14 @@ import Comment from "../model/comment.js";
 import Post from "../model/post.js";
 import Notification from "../model/notification.js";
 import { io } from "../server.js";  // ⭐ REQUIRED for socket emit
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, "..", "uploads", "post");
 
 export const createComment = async (req, res) => {
   try {
@@ -29,15 +37,27 @@ export const createComment = async (req, res) => {
       }
     }
 
+    // Process files with compression
+    const imageFiles = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        const filePath = path.join(uploadDir, fileName);
+
+        await sharp(file.buffer)
+          .webp({ quality: 80 })
+          .toFile(filePath);
+
+        imageFiles.push(`uploads/post/${fileName}`);
+      }
+    }
+
     // Create the new comment
     const comment = await Comment.create({
       post: postId,
       user: req.user._id,
       content,
-      files:
-        req.files?.map((file) =>
-          file.path.replace(/\\/g, "/").replace(/^.*uploads[\\/]/, "uploads/")
-        ) || [],
+      files: imageFiles,
       parentComment: parentCommentId || null,
       mentionedUser: parentComment ? parentComment.user._id : null,
     });
@@ -64,7 +84,7 @@ export const createComment = async (req, res) => {
     }
 
     if (notifyUserId) {
-      await Notification.create({
+      const newNotif = await Notification.create({
         user: notifyUserId,
         fromUser: req.user._id,
         type: "comment",
@@ -73,18 +93,21 @@ export const createComment = async (req, res) => {
         message,
       });
 
-      // Count unread notifications for that user
+      // 1. Populate fromUser and post for immediate frontend display
+      const populatedNotif = await Notification.findById(newNotif._id)
+        .populate("fromUser", "fullname profile_url")
+        .populate("post", "title");
+
+      // 2. Count unread notifications for that user
       const unreadCount = await Notification.countDocuments({
         user: notifyUserId,
         read: false,
       });
 
-      // ---------------------------------------
-      // 🔥 REAL-TIME SOCKET IO EMIT
-      // ---------------------------------------
+      // 3. Emit real-time notification with ALL info
       io.to(notifyUserId.toString()).emit("notification:new", {
+        ...populatedNotif._doc,
         count: unreadCount,
-        message,
       });
 
       console.log(`📢 Sent notification to user ${notifyUserId}:`, message);

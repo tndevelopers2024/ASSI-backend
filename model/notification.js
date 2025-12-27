@@ -4,7 +4,7 @@ const notificationSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // who receives it
     fromUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // who triggered it
-    type: { type: String, enum: ["comment"], required: true },
+    type: { type: String, enum: ["comment", "like"], required: true },
     post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
     comment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment" },
     message: { type: String, required: true },

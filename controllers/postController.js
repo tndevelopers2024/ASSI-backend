@@ -2,19 +2,107 @@ import Post from "../model/post.js";
 import User from "../model/user.js";
 import { io } from "../server.js";   // ⭐ REQUIRED for socket
 import Comment from "../model/comment.js";
+import Notification from "../model/notification.js";
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, "..", "uploads", "post");
+
+// ... existing code ...
+
+export const toggleLikePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const isLiked = post.likes.includes(userId);
+
+    if (isLiked) {
+      // Unlike
+      post.likes = post.likes.filter((like) => like.toString() !== userId.toString());
+      await post.save();
+
+      // 🔥 Broadcast the update to everyone
+      const updatedPost = await Post.findById(id).populate("user", "fullname email profile_url user_id createdAt");
+      io.emit("post:updated", updatedPost);
+
+      return res.json({ message: "Post unliked", isLiked: false, likesCount: post.likes.length });
+    } else {
+      // Like
+      post.likes.push(userId);
+      await post.save();
+
+      // Create Notification if not self-like
+      if (post.user.toString() !== userId.toString()) {
+        const newNotif = await Notification.create({
+          user: post.user,
+          fromUser: userId,
+          type: "like",
+          post: post._id,
+          message: `${req.user.fullname} liked your post.`,
+        });
+
+        // 1. Populate fromUser for immediate frontend display
+        const populatedNotif = await Notification.findById(newNotif._id)
+          .populate("fromUser", "fullname profile_url")
+          .populate("post", "title");
+
+        // 2. Count unread notifications for the recipient
+        const unreadCount = await Notification.countDocuments({
+          user: post.user,
+          read: false,
+        });
+
+        // 3. Emit matching frontend Topbar's expectation (data.count)
+        io.to(post.user.toString()).emit("notification:new", {
+          ...populatedNotif._doc,
+          count: unreadCount,
+        });
+      }
+
+      // 🔥 4. Emit to ALL users so the like count updates in real-time on everyone's screen
+      const updatedPost = await Post.findById(post._id).populate("user", "fullname email profile_url user_id createdAt");
+      io.emit("post:updated", updatedPost);
+
+      return res.json({ message: "Post liked", isLiked: true, likesCount: post.likes.length });
+    }
+  } catch (error) {
+    console.error("Toggle like error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
 
 
 export const createPost = async (req, res) => {
   try {
-    const imageUrls =
-      req.files?.map((file) =>
-        file.path
-          .replace(/\\/g, "/")
-          .replace(/^.*uploads[\\/]/, "uploads/")
-      ) || [];
-
     if (!req.body.title) {
       return res.status(400).json({ message: "Title is required" });
+    }
+
+    const imageUrls = [];
+
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        const filePath = path.join(uploadDir, fileName);
+
+        // Compression logic: Convert to webp and try to hit 200kb-500kb
+        // Webp at 80 quality is usually very efficient.
+        await sharp(file.buffer)
+          .webp({ quality: 80 })
+          .toFile(filePath);
+
+        imageUrls.push(`uploads/post/${fileName}`);
+      }
     }
 
     const post = await Post.create({
@@ -56,10 +144,22 @@ export const createPost = async (req, res) => {
 export const getAllPosts = async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate("user", "fullname email profile_url user_id createdAt")   // ← FIXED
+      .populate("user", "fullname email profile_url user_id createdAt")
       .sort({ createdAt: -1 });
 
-    res.json(posts);
+    // Add commentsCount to each post
+    const postsWithCounts = await Promise.all(
+      posts.map(async (post) => {
+        const commentsCount = await Comment.countDocuments({ post: post._id });
+        return {
+          ...post._doc,
+          commentsCount,
+          likesCount: post.likes.length,
+        };
+      })
+    );
+
+    res.json(postsWithCounts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -101,7 +201,18 @@ export const getPostsByUser = async (req, res) => {
       .populate("user", "fullname email profile_url user_id")
       .sort({ createdAt: -1 });
 
-    res.json(posts);
+    const postsWithCounts = await Promise.all(
+      posts.map(async (post) => {
+        const commentsCount = await Comment.countDocuments({ post: post._id });
+        return {
+          ...post._doc,
+          commentsCount,
+          likesCount: post.likes.length,
+        };
+      })
+    );
+
+    res.json(postsWithCounts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -139,9 +250,16 @@ export const updatePost = async (req, res) => {
     // ⬅️ Extract newly uploaded image URLs
     let newImageUrls = [];
     if (req.files && req.files.length > 0) {
-      newImageUrls = req.files.map((file) =>
-        file.path.replace(/\\/g, "/").replace(/^.*uploads[\\/]/, "uploads/")
-      );
+      for (const file of req.files) {
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        const filePath = path.join(uploadDir, fileName);
+
+        await sharp(file.buffer)
+          .webp({ quality: 80 })
+          .toFile(filePath);
+
+        newImageUrls.push(`uploads/post/${fileName}`);
+      }
     }
 
     // ⬅️ MERGE: existingImages (kept) + newImageUrls (uploaded)
@@ -194,7 +312,18 @@ export const getSavedPosts = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.json(user.savedPosts);
+    const savedPostsWithCounts = await Promise.all(
+      user.savedPosts.map(async (post) => {
+        const commentsCount = await Comment.countDocuments({ post: post._id });
+        return {
+          ...post._doc,
+          commentsCount,
+          likesCount: post.likes ? post.likes.length : 0,
+        };
+      })
+    );
+
+    res.json(savedPostsWithCounts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -209,7 +338,13 @@ export const getPostById = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    res.json(post);
+    const commentsCount = await Comment.countDocuments({ post: post._id });
+
+    res.json({
+      ...post._doc,
+      commentsCount,
+      likesCount: post.likes.length,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: error.message });

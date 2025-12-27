@@ -14,15 +14,8 @@ const router = express.Router();
 // 🔹 Get all notifications
 router.get("/", protect, getNotifications);
 
-// 🔹 Mark ONE notification as read (NEW FIXED ROUTE)
-router.put("/mark-one-read/:id", protect, async (req, res) => {
-  try {
-    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to mark notification as read" });
-  }
-});
+// 🔹 Mark ONE notification as read
+router.put("/mark-one-read/:id", protect, markAsRead);
 
 // 🔹 Existing route to mark read (still works)
 router.put("/:id/read", protect, markAsRead);
