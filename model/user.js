@@ -25,6 +25,8 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "superadmin"],
       default: "user",
     },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
     savedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
   },
   { timestamps: true }

@@ -1,6 +1,7 @@
 // server.js
 import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
 import cors from "cors";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
@@ -14,7 +15,6 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-dotenv.config();
 connectDB();
 
 const app = express();

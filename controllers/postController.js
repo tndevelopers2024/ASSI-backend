@@ -175,8 +175,11 @@ export const deletePost = async (req, res) => {
     const post = await Post.findById(id);
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    // Check ownership
-    if (post.user.toString() !== req.user._id.toString()) {
+    // Check ownership or superadmin role
+    if (
+      post.user.toString() !== req.user._id.toString() &&
+      req.user.role !== "superadmin"
+    ) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
@@ -227,8 +230,11 @@ export const updatePost = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Check authorization
-    if (post.user.toString() !== req.user._id.toString()) {
+    // Check authorization or superadmin role
+    if (
+      post.user.toString() !== req.user._id.toString() &&
+      req.user.role !== "superadmin"
+    ) {
       return res.status(403).json({ message: "Not authorized to update this post" });
     }
 
