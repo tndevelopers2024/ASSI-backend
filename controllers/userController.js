@@ -11,9 +11,11 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      $or: [{ email: email }, { user_id: email }],
+    });
     if (!user) {
-      return res.status(400).json({ message: "Invalid Email" });
+      return res.status(400).json({ message: "Invalid Email or User ID" });
     }
 
     let isMatch = false;
