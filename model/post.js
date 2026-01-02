@@ -17,17 +17,39 @@ const postSchema = new mongoose.Schema(
     },
 
     category: {
-      type: String,
-      enum: [
-        "General",
-        "Education",
-        "Coding",
-        "Design",
-        "News",
-        "Technology",
-        "Entertainment",
-        "Other",
-      ],
+      type: [String],
+      validate: {
+        validator: function (arr) {
+          // Must have at least 1 category
+          if (!arr || arr.length === 0) return false;
+
+          // All values must be from the enum
+          const validCategories = [
+            "Diagnostic Dilemma",
+            "Cranioverterbal",
+            "Cervical",
+            "Thoracic",
+            "Lumbar",
+            "Sacral",
+            "Degenerative",
+            "Trauma",
+            "Tumours",
+            "Metastasis",
+            "Infections",
+            "Tuberculosis",
+            "Adult deformity",
+            "Pediatric Deformity",
+            "Osteoporosis",
+            "Inflammatory",
+            "Metabolic",
+            "Complications",
+            "Minimally invasive surgery",
+            "Other",
+          ];
+          return arr.every(cat => validCategories.includes(cat));
+        },
+        message: "Please select at least 1 valid category"
+      },
       required: true,
     },
 
