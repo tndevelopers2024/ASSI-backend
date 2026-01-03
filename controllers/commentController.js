@@ -84,34 +84,49 @@ export const createComment = async (req, res) => {
     }
 
     if (notifyUserId) {
-      const newNotif = await Notification.create({
-        user: notifyUserId,
-        fromUser: req.user._id,
-        type: "comment",
-        post: post._id,
-        comment: comment._id,
-        message,
-      });
 
-      // 1. Populate fromUser and post for immediate frontend display
-      const populatedNotif = await Notification.findById(newNotif._id)
-        .populate("fromUser", "fullname profile_url")
-        .populate("post", "title");
+  const exists = await Notification.findOne({
+    user: notifyUserId,
+    fromUser: req.user._id,
+    post: post._id,
+    comment: comment._id,
+    type: "comment"
+  });
 
-      // 2. Count unread notifications for that user
-      const unreadCount = await Notification.countDocuments({
-        user: notifyUserId,
-        read: false,
-      });
+  if (!exists) {
+    const newNotif = await Notification.create({
+      user: notifyUserId,
+      fromUser: req.user._id,
+      type: "comment",
+      post: post._id,
+      comment: comment._id,
+      message,
+    });
 
-      // 3. Emit real-time notification with ALL info
-      io.to(notifyUserId.toString()).emit("notification:new", {
-        ...populatedNotif._doc,
-        count: unreadCount,
-      });
+    const populatedNotif = await Notification.findById(newNotif._id)
+      .populate("fromUser", "fullname profile_url")
+      .populate("post", "title");
 
-      console.log(`📢 Sent notification to user ${notifyUserId}:`, message);
-    }
+    const unread = await Notification.find({
+      user: notifyUserId,
+      read: false
+    })
+      .populate("post", "_id")
+      .populate("comment", "_id");
+
+    const unreadCount = unread.filter(
+      (n) =>
+        n.post?._id &&
+        (n.type === "like" || n.comment?._id)
+    ).length;
+
+    io.to(notifyUserId.toString()).emit("notification:new", {
+      ...populatedNotif._doc,
+      count: unreadCount,
+    });
+  }
+}
+
 
     // ---------------------------------------
 

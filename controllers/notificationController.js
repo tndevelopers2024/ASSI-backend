@@ -5,26 +5,33 @@ import { io } from "../server.js"; // import the shared io instance
 // Get all notifications for the authenticated user
 export const getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find({ user: req.user._id })
+    const notifications = await Notification.find({
+      user: req.user._id
+    })
       .populate("fromUser", "fullname email profile_url")
       .populate("post", "_id title content category images")
       .populate("comment", "_id")
       .sort({ createdAt: -1 });
 
-    res.json(notifications);
+    const valid = notifications.filter(
+      (n) =>
+        n.post?._id &&
+        (n.type === "like" || n.comment?._id)
+    );
+
+    res.json(valid);
+
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
 };
 
+
 // Mark a single notification as read
 export const markAsRead = async (req, res) => {
   try {
-    const notifId = req.params.id;
-
-    // Update the notification if it belongs to the user
     const notif = await Notification.findOneAndUpdate(
-      { _id: notifId, user: req.user._id },
+      { _id: req.params.id, user: req.user._id },
       { read: true },
       { new: true }
     );
@@ -33,38 +40,58 @@ export const markAsRead = async (req, res) => {
       return res.status(404).json({ message: "Notification not found" });
     }
 
-    // Recalculate unread count
-    const count = await Notification.countDocuments({
+    // Recalculate unread count (VALID notifications only)
+    const unread = await Notification.find({
       user: req.user._id,
       read: false
+    })
+      .populate("post", "_id")
+      .populate("comment", "_id");
+
+    const unreadCount = unread.filter(
+      (n) =>
+        n.post?._id &&
+        (n.type === "like" || n.comment?._id)
+    ).length;
+
+
+    // ✅ ONLY emit read event (DO NOT emit notification:new here)
+    io.to(req.user._id.toString()).emit("notification:read", { count: unreadCount });
+
+    res.json({
+      success: true,
+      message: "Marked as read",
+      count: unreadCount
     });
-
-    // Emit to this user's room so frontends update badge instantly
-    try {
-      io.to(req.user._id.toString()).emit("notification:read", { count });
-    } catch (emitErr) {
-      console.error("Socket emit error (markAsRead):", emitErr);
-    }
-
-    res.json({ success: true, message: "Marked as read", count });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    res.status(500).json({ message: e.message });
   }
 };
+
 
 // Get unread notifications count
 export const getUnreadCount = async (req, res) => {
   try {
-    const count = await Notification.countDocuments({
+    const unread = await Notification.find({
       user: req.user._id,
       read: false
-    });
+    })
+      .populate("post", "_id")
+      .populate("comment", "_id");
+
+    const count = unread.filter(
+      (n) =>
+        n.post?._id &&
+        (n.type === "like" || n.comment?._id)
+    ).length;
 
     res.json({ count });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 // Mark all notifications as read
 export const markAllRead = async (req, res) => {
@@ -74,14 +101,12 @@ export const markAllRead = async (req, res) => {
       { read: true }
     );
 
-    // After marking all read, unread count is zero; emit event
-    try {
-      io.to(req.user._id.toString()).emit("notification:read", { count: 0 });
-    } catch (emitErr) {
-      console.error("Socket emit error (markAllRead):", emitErr);
-    }
+    io.to(req.user._id.toString()).emit("notification:read", { count: 0 });
 
-    res.json({ message: "All notifications marked as read", count: 0 });
+    res.json({
+      message: "All notifications marked as read",
+      count: 0
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

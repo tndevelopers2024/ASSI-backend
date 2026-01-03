@@ -10,10 +10,10 @@ const createAdmin = async () => {
 
     const admin = await User.create({
       token: "",
-      user_id: "Developer@001",
-      password: "devpass@003", // plain text (your login logic supports both)
-      fullname: "Developer",
-      email: "madhavangl20@gmail.com",
+      user_id: "assi1234",
+      password: "1234567", // plain text (your login logic supports both)
+      fullname: "Prem",
+      email: "prem@pixelmonkeydigital.com",
       phonenumber: "",
       payment_mode: "",
       membership_plan: "",
@@ -25,7 +25,7 @@ const createAdmin = async () => {
       profile_url: "",
       designation_hospital: "",
       nmc_registration_number: "",
-      role: "user",
+      role: "superadmin",
     });
 
     console.log("Super Admin Created:", admin);
