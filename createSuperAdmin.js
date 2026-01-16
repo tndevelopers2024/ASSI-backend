@@ -10,10 +10,10 @@ const createAdmin = async () => {
 
     const admin = await User.create({
       token: "",
-      user_id: "assi1234",
+      user_id: "assi9876",
       password: "1234567", // plain text (your login logic supports both)
-      fullname: "Prem",
-      email: "prem@pixelmonkeydigital.com",
+      fullname: "Narasimman",
+      email: "narasimman.pixelmonkey@gmail.com",
       phonenumber: "",
       payment_mode: "",
       membership_plan: "",

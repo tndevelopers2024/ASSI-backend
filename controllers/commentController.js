@@ -15,8 +15,10 @@ export const createComment = async (req, res) => {
   try {
     const { postId, content, parentCommentId } = req.body;
 
-    if (!postId || !content) {
-      return res.status(400).json({ message: "postId and content required" });
+    const hasFiles = req.files && req.files.length > 0;
+
+    if (!postId || (!content && !hasFiles)) {
+      return res.status(400).json({ message: "Content or file is required" });
     }
 
     const post = await Post.findById(postId).populate("user", "fullname email profile_url user_id");
@@ -85,47 +87,47 @@ export const createComment = async (req, res) => {
 
     if (notifyUserId) {
 
-  const exists = await Notification.findOne({
-    user: notifyUserId,
-    fromUser: req.user._id,
-    post: post._id,
-    comment: comment._id,
-    type: "comment"
-  });
+      const exists = await Notification.findOne({
+        user: notifyUserId,
+        fromUser: req.user._id,
+        post: post._id,
+        comment: comment._id,
+        type: "comment"
+      });
 
-  if (!exists) {
-    const newNotif = await Notification.create({
-      user: notifyUserId,
-      fromUser: req.user._id,
-      type: "comment",
-      post: post._id,
-      comment: comment._id,
-      message,
-    });
+      if (!exists) {
+        const newNotif = await Notification.create({
+          user: notifyUserId,
+          fromUser: req.user._id,
+          type: "comment",
+          post: post._id,
+          comment: comment._id,
+          message,
+        });
 
-    const populatedNotif = await Notification.findById(newNotif._id)
-      .populate("fromUser", "fullname profile_url")
-      .populate("post", "title");
+        const populatedNotif = await Notification.findById(newNotif._id)
+          .populate("fromUser", "fullname profile_url")
+          .populate("post", "title");
 
-    const unread = await Notification.find({
-      user: notifyUserId,
-      read: false
-    })
-      .populate("post", "_id")
-      .populate("comment", "_id");
+        const unread = await Notification.find({
+          user: notifyUserId,
+          read: false
+        })
+          .populate("post", "_id")
+          .populate("comment", "_id");
 
-    const unreadCount = unread.filter(
-      (n) =>
-        n.post?._id &&
-        (n.type === "like" || n.comment?._id)
-    ).length;
+        const unreadCount = unread.filter(
+          (n) =>
+            n.post?._id &&
+            (n.type === "like" || n.comment?._id)
+        ).length;
 
-    io.to(notifyUserId.toString()).emit("notification:new", {
-      ...populatedNotif._doc,
-      count: unreadCount,
-    });
-  }
-}
+        io.to(notifyUserId.toString()).emit("notification:new", {
+          ...populatedNotif._doc,
+          count: unreadCount,
+        });
+      }
+    }
 
 
     // ---------------------------------------
