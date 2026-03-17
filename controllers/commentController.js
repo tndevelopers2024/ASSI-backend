@@ -115,8 +115,8 @@ export const createComment = async (req, res) => {
 
         const unreadCount = unread.filter(
           (n) =>
-            n.post?._id &&
-            (n.type === "like" || n.comment?._id)
+          n.post?._id &&
+          (n.type === "like" || n.comment?._id)
         ).length;
 
         io.to(notifyUserId.toString()).emit("notification:new", {

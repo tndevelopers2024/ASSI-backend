@@ -30,7 +30,16 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    console.log("Incoming Request Origin:", origin);
+    // Allow if origin is in list OR if it's from assiconnect.in/assi.world subdomains
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith("assiconnect.in") || origin.endsWith("assi.world")) {
+      callback(null, true);
+    } else {
+      console.log("CORS Blocked for origin:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
