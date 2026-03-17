@@ -84,6 +84,11 @@ export const toggleLikePost = async (req, res) => {
 
 export const createPost = async (req, res) => {
   try {
+    console.log("📥 Incoming createPost request:", {
+      body: req.body,
+      filesCount: req.files ? req.files.length : 0,
+    });
+
     if (!req.body.title) {
       return res.status(400).json({ message: "Title is required" });
     }
@@ -91,17 +96,30 @@ export const createPost = async (req, res) => {
     const imageUrls = [];
 
     if (req.files && req.files.length > 0) {
+      // Ensure directory exists at runtime for the live server
+      if (!fs.existsSync(uploadDir)) {
+        console.log("📁 Creating missing upload directory:", uploadDir);
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
       for (const file of req.files) {
         const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
         const filePath = path.join(uploadDir, fileName);
 
-        // Compression logic: Convert to webp and try to hit 200kb-500kb
-        // Webp at 80 quality is usually very efficient.
-        await sharp(file.buffer)
-          .webp({ quality: 80 })
-          .toFile(filePath);
+        console.log(`Processing file: ${file.originalname} -> ${fileName}`);
 
-        imageUrls.push(`uploads/post/${fileName}`);
+        try {
+          // Compression logic: Convert to webp and try to hit 200kb-500kb
+          await sharp(file.buffer)
+            .webp({ quality: 80 })
+            .toFile(filePath);
+          
+          console.log(`✅ File saved successfully: ${filePath}`);
+          imageUrls.push(`uploads/post/${fileName}`);
+        } catch (sharpError) {
+          console.error("❌ Sharp processing error:", sharpError);
+          throw new Error(`Image processing failed: ${sharpError.message}`);
+        }
       }
     }
 
@@ -112,6 +130,8 @@ export const createPost = async (req, res) => {
       category: req.body.category,
       images: imageUrls,
     });
+
+    console.log("✅ Post created in DB:", post._id);
 
     // -------------------------------------------
     // ⭐🔥 SEND REAL-TIME EVENT TO ALL USERS
@@ -133,6 +153,7 @@ export const createPost = async (req, res) => {
     res.json({ message: "Post created", post });
 
   } catch (error) {
+    console.error("💥 createPost Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
