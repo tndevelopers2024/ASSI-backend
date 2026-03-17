@@ -12,6 +12,17 @@ const uploadDir = path.join(__dirname, "..", "uploads", "post");
 
 export const createComment = async (req, res) => {
   try {
+    // 🛡️ Membership Restriction: VAAS Members can only like posts
+    if (
+      req.user.membership_category && 
+      req.user.membership_category.toUpperCase() === "VAAS MEMBER" && 
+      req.user.role !== "superadmin"
+    ) {
+      return res.status(403).json({ 
+        message: "VAAS Members can only like posts. Commenting is restricted to Life Members." 
+      });
+    }
+
     const { postId, content, parentCommentId } = req.body;
 
     const hasFiles = req.files && req.files.length > 0;

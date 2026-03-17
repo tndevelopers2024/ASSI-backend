@@ -83,6 +83,17 @@ export const toggleLikePost = async (req, res) => {
 
 export const createPost = async (req, res) => {
   try {
+    // 🛡️ Membership Restriction: VAAS Members can only like posts
+    if (
+      req.user.membership_category && 
+      req.user.membership_category.toUpperCase() === "VAAS MEMBER" && 
+      req.user.role !== "superadmin"
+    ) {
+      return res.status(403).json({ 
+        message: "VAAS Members can only like posts. Posting is restricted to Life Members." 
+      });
+    }
+
     console.log("📥 Incoming createPost request:", {
       body: req.body,
       filesCount: req.files ? req.files.length : 0,
