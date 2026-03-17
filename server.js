@@ -20,7 +20,25 @@ connectDB();
 const app = express();
 
 // Middlewares
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://assiconnect.in",
+  "https://www.assiconnect.in",
+  "https://assi.world",
+  "https://www.assi.world"
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -43,11 +61,9 @@ const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
   cors: {
-    origin: [
-      process.env.CLIENT_URL || "http://localhost:3000",
-      "http://localhost:5173"
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT"],
+    credentials: true
   },
 });
 
