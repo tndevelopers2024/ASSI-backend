@@ -69,7 +69,14 @@ const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      const actualOrigin = origin ? origin.split(',')[0].trim() : null;
+      if (!actualOrigin || allowedOrigins.includes(actualOrigin) || actualOrigin.endsWith("assiconnect.in") || actualOrigin.endsWith("assi.world")) {
+        callback(null, actualOrigin || true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT"],
     credentials: true
   },
