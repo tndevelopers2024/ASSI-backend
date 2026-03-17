@@ -3,7 +3,6 @@ import User from "../model/user.js";
 import { io } from "../server.js";   // ⭐ REQUIRED for socket
 import Comment from "../model/comment.js";
 import Notification from "../model/notification.js";
-import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -103,22 +102,22 @@ export const createPost = async (req, res) => {
       }
 
       for (const file of req.files) {
-        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        // Keep original extension instead of forcing .webp
+        const extension = path.extname(file.originalname) || ".jpg";
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}${extension}`;
         const filePath = path.join(uploadDir, fileName);
 
-        console.log(`Processing file: ${file.originalname} -> ${fileName}`);
+        console.log(`Saving file: ${file.originalname} -> ${fileName}`);
 
         try {
-          // Compression logic: Convert to webp and try to hit 200kb-500kb
-          await sharp(file.buffer)
-            .webp({ quality: 80 })
-            .toFile(filePath);
+          // Save the original buffer directly to disk
+          fs.writeFileSync(filePath, file.buffer);
           
           console.log(`✅ File saved successfully: ${filePath}`);
           imageUrls.push(`uploads/post/${fileName}`);
-        } catch (sharpError) {
-          console.error("❌ Sharp processing error:", sharpError);
-          throw new Error(`Image processing failed: ${sharpError.message}`);
+        } catch (saveError) {
+          console.error("❌ File saving error:", saveError);
+          throw new Error(`File saving failed: ${saveError.message}`);
         }
       }
     }
@@ -278,13 +277,11 @@ export const updatePost = async (req, res) => {
     let newImageUrls = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        const extension = path.extname(file.originalname) || ".jpg";
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}${extension}`;
         const filePath = path.join(uploadDir, fileName);
 
-        await sharp(file.buffer)
-          .webp({ quality: 80 })
-          .toFile(filePath);
-
+        fs.writeFileSync(filePath, file.buffer);
         newImageUrls.push(`uploads/post/${fileName}`);
       }
     }
