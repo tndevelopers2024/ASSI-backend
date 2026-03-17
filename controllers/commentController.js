@@ -2,7 +2,6 @@ import Comment from "../model/comment.js";
 import Post from "../model/post.js";
 import Notification from "../model/notification.js";
 import { io } from "../server.js";  // ⭐ REQUIRED for socket emit
-import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -39,17 +38,15 @@ export const createComment = async (req, res) => {
       }
     }
 
-    // Process files with compression
+    // Process files
     const imageFiles = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}.webp`;
+        const extension = path.extname(file.originalname) || ".jpg";
+        const fileName = `${Date.now()}-${file.originalname.split(".")[0]}${extension}`;
         const filePath = path.join(uploadDir, fileName);
 
-        await sharp(file.buffer)
-          .webp({ quality: 80 })
-          .toFile(filePath);
-
+        fs.writeFileSync(filePath, file.buffer);
         imageFiles.push(`uploads/post/${fileName}`);
       }
     }
