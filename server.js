@@ -32,11 +32,14 @@ const allowedOrigins = [
 app.use(cors({
   origin: function (origin, callback) {
     console.log("Incoming Request Origin:", origin);
-    // Allow if origin is in list OR if it's from assiconnect.in/assi.world subdomains
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith("assiconnect.in") || origin.endsWith("assi.world")) {
-      callback(null, true);
+    
+    // Handle cases where origin might be a comma-separated list
+    const actualOrigin = origin ? origin.split(',')[0].trim() : null;
+    
+    if (!actualOrigin || allowedOrigins.includes(actualOrigin) || actualOrigin.endsWith("assiconnect.in") || actualOrigin.endsWith("assi.world")) {
+      callback(null, actualOrigin || true);
     } else {
-      console.log("CORS Blocked for origin:", origin);
+      console.log("CORS Blocked for origin:", actualOrigin);
       callback(new Error("Not allowed by CORS"));
     }
   },
