@@ -15,7 +15,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-connectDB();
+// Database connection will be initiated at the bottom of the file
 
 const app = express();
 
@@ -98,6 +98,16 @@ io.on("connection", (socket) => {
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Start server after connecting to MongoDB
+const startServer = async () => {
+  try {
+    await connectDB();
+    const PORT = process.env.PORT || 5000;
+    httpServer.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+  } catch (error) {
+    console.error("Fatal error starting server:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
